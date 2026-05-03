@@ -26,14 +26,6 @@ def get_db_connection():
 
 def verificar_usuario(username, password):
     """Verifica credenciales contra la tabla usuarios."""
-    # Bypass temporal para resolver el error de salt y permitir acceso
-    if username == "admin" and password == "admin123":
-        return {
-            "id_usuario": 1,
-            "nombre_usuario": "admin",
-            "rol": "administrador"
-        }
-    
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
@@ -41,7 +33,6 @@ def verificar_usuario(username, password):
                 user = cur.fetchone()
                 if user:
                     stored_hash = user['contrasena_hash'].strip()
-                    # Asegurarse de que el hash sea bytes para checkpw
                     if isinstance(stored_hash, str):
                         stored_hash = stored_hash.encode('utf-8')
                     if bcrypt.checkpw(password.encode('utf-8'), stored_hash):
@@ -50,30 +41,36 @@ def verificar_usuario(username, password):
         st.error(f"Error de base de datos: {e}")
     return None
 
-def registrar_log(id_usuario, accion, detalles, ip_origen=''):
+def registrar_log(id_usuario, accion, detalles, id_triaje=None, ip_origen=''):
     """Registra una acción en logs_auditoria."""
-    with get_db_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO logs_auditoria (id_usuario, accion, detalles, ip_origen)
-                VALUES (%s, %s, %s, %s)
-            """, (id_usuario, accion, detalles, ip_origen))
-            conn.commit()
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO logs_auditoria (id_usuario, id_triaje, accion, detalles, ip_origen)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (id_usuario, id_triaje, accion, detalles, ip_origen))
+                conn.commit()
+    except Exception as e:
+        print(f"Error al registrar log: {e}")
 
 def obtener_pacientes():
     """Retorna lista de pacientes para selectores."""
     with get_db_connection() as conn:
-        return pd.read_sql("SELECT id_paciente, nombre_completo FROM pacientes ORDER BY nombre_completo", conn)
+        return pd.read_sql("SELECT id_paciente, nombre_completo, documento_identidad, id_externo_hce FROM pacientes ORDER BY nombre_completo", conn)
 
 def guardar_triaje(data):
     """Guarda un triaje y su resultado IA, retorna id_triaje."""
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            # Registrar fecha_hora_fin como el momento actual de guardado
+            fecha_fin = datetime.now()
+            
             cur.execute("""
                 INSERT INTO triajes (id_paciente, id_usuario, presion_arterial_sist, presion_arterial_diast,
                                      frecuencia_cardiaca, temperatura, saturacion_oxigeno, sintomas,
-                                     nivel_urgencia, conducta_sugerida)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                     nivel_urgencia, nivel_urgencia_usuario, conducta_sugerida, fecha_hora_fin, estado_sincronizacion_hce)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'pendiente')
                 RETURNING id_triaje
             """, (
                 int(data['id_paciente']), int(data['id_usuario']),
@@ -83,15 +80,25 @@ def guardar_triaje(data):
                 float(data.get('temperatura')) if data.get('temperatura') is not None else None,
                 int(data.get('saturacion_oxigeno')) if data.get('saturacion_oxigeno') is not None else None,
                 data.get('sintomas'),
-                data.get('nivel_urgencia'), data.get('conducta_sugerida')
+                data.get('nivel_urgencia'), 
+                data.get('nivel_urgencia_usuario'),
+                data.get('conducta_sugerida'),
+                fecha_fin
             ))
             id_triaje = cur.fetchone()[0]
+            
             # Guardar resultado IA si existe
             if 'resultado_ia' in data:
                 cur.execute("""
-                    INSERT INTO resultados_ia (id_triaje, nivel_urgencia_ia, conducta_sugerida_ia, diagnosticos_diferenciales)
-                    VALUES (%s, %s, %s, %s)
-                """, (id_triaje, data['resultado_ia']['nivel_urgencia'], data['resultado_ia']['conducta_sugerida'],
-                      data['resultado_ia']['diagnosticos_diferenciales']))
+                    INSERT INTO resultados_ia (id_triaje, nivel_urgencia_ia, conducta_sugerida_ia, 
+                                             diagnosticos_diferenciales, prompt_enviado, respuesta_raw)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (id_triaje, 
+                      data['resultado_ia'].get('nivel_urgencia'), 
+                      data['resultado_ia'].get('conducta_sugerida'),
+                      data['resultado_ia'].get('diagnosticos_diferenciales'),
+                      data['resultado_ia'].get('prompt_enviado'),
+                      data['resultado_ia'].get('respuesta_raw')))
+            
             conn.commit()
             return id_triaje

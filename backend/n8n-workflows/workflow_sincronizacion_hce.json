@@ -3,9 +3,9 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM triajes WHERE id_triaje NOT IN (SELECT id_triaje FROM resultados_ia)"
+        "query": "SELECT * FROM triajes WHERE estado_sincronizacion_hce = 'pendiente' OR (estado_sincronizacion_hce = 'error' AND intentos_sincronizacion < 5)"
       },
-      "name": "Consultar Triajes Pendientes",
+      "name": "Consultar Pendientes",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 1,
       "position": [
@@ -17,22 +17,26 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://mock-hce:5000/api/hce/sync",
+        "url": "http://mock-hce:5001/api/hce/sync",
         "bodyParametersUi": {
           "parameter": [
             {
-              "name": "paciente_id",
-              "value": "={{$node[\"Consultar Triajes Pendientes\"].json[\"paciente_id\"]}}"
+              "name": "id_paciente",
+              "value": "={{$node[\"Consultar Pendientes\"].json[\"id_paciente\"]}}"
             },
             {
-              "name": "resultado_triaje",
-              "value": "={{$node[\"Consultar Triajes Pendientes\"].json[\"resultado\"]}}"
+              "name": "nivel_urgencia",
+              "value": "={{$node[\"Consultar Pendientes\"].json[\"nivel_urgencia\"]}}"
+            },
+            {
+              "name": "conducta",
+              "value": "={{$node[\"Consultar Pendientes\"].json[\"conducta_sugerida\"]}}"
             }
           ]
         },
         "options": {}
       },
-      "name": "Sincronizar Mock HCE",
+      "name": "Enviar a HCE",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
@@ -43,37 +47,62 @@
     },
     {
       "parameters": {
-        "chatId": "ID_DE_TU_CHAT",
-        "text": "Triaje sincronizado para el paciente ID: {{$node[\"Consultar Triajes Pendientes\"].json[\"id_paciente\"]}}",
-        "additionalFields": {}
+        "operation": "update",
+        "table": "triajes",
+        "updateKey": "id_triaje",
+        "data": {
+          "id_triaje": "={{$node[\"Consultar Pendientes\"].json[\"id_triaje\"]}}",
+          "estado_sincronizacion_hce": "enviado"
+        }
       },
-      "name": "Notificar Sincronización",
-      "type": "n8n-nodes-base.telegram",
+      "name": "Marcar Éxito",
+      "type": "n8n-nodes-base.postgres",
       "typeVersion": 1,
       "position": [
         750,
-        300
+        200
       ],
-      "id": "telegram-sync"
+      "id": "postgres-success"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE triajes SET estado_sincronizacion_hce = 'error', intentos_sincronizacion = intentos_sincronizacion + 1 WHERE id_triaje = {{$node[\"Consultar Pendientes\"].json[\"id_triaje\"]}}"
+      },
+      "name": "Marcar Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        750,
+        400
+      ],
+      "id": "postgres-error"
     }
   ],
   "connections": {
-    "Consultar Triajes Pendientes": {
+    "Consultar Pendientes": {
       "main": [
         [
           {
-            "node": "Sincronizar Mock HCE",
+            "node": "Enviar a HCE",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Sincronizar Mock HCE": {
+    "Enviar a HCE": {
       "main": [
         [
           {
-            "node": "Notificar Sincronización",
+            "node": "Marcar Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar Error",
             "type": "main",
             "index": 0
           }

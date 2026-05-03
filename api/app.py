@@ -123,7 +123,7 @@ def metricas_gestion():
                 SELECT u.nombre_usuario, COUNT(t.id_triaje) as total
                 FROM usuarios u
                 LEFT JOIN triajes t ON u.id_usuario = t.id_usuario
-                GROUP BY u.id_usuario
+                GROUP BY u.id_usuario, u.nombre_usuario
                 ORDER BY total DESC
             """)
             por_usuario = cur.fetchall()
@@ -143,11 +143,11 @@ def metricas_gestion():
             # Se podría agregar una columna 'conducta_cumplida' en triajes. Por ahora mock.
             cumplimiento = 85  # %
 
-            # Tiempo promedio de atención (simulado)
+            # Tiempo promedio de atención
             cur.execute("""
-                SELECT AVG(EXTRACT(EPOCH FROM (fecha_hora - created_at)))/60 as avg_minutes
+                SELECT AVG(EXTRACT(EPOCH FROM (fecha_hora_fin - fecha_hora)))/60 as avg_minutes
                 FROM triajes
-                WHERE created_at IS NOT NULL AND fecha_hora > created_at
+                WHERE fecha_hora_fin IS NOT NULL AND fecha_hora_fin > fecha_hora
             """)
             tiempo_atencion = cur.fetchone()['avg_minutes'] or 0
 

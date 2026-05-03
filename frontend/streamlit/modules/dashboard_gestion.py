@@ -76,13 +76,13 @@ def show():
         with c_bottom2:
             st.markdown("#### 👨‍⚕️ Actividad por Usuario")
             df_usuarios = pd.read_sql("""
-                SELECT u.nombre_usuario AS Usuario, COUNT(t.id_triaje) AS Total
+                SELECT u.nombre_usuario AS usuario, COUNT(t.id_triaje) AS total
                 FROM usuarios u
                 LEFT JOIN triajes t ON u.id_usuario = t.id_usuario
-                GROUP BY u.id_usuario
-                ORDER BY Total DESC
+                GROUP BY u.id_usuario, u.nombre_usuario
+                ORDER BY total DESC
             """, conn)
-            fig_bar = px.bar(df_usuarios, x='Usuario', y='Total', 
-                            color='Total', color_continuous_scale='Blues')
+            fig_bar = px.bar(df_usuarios, x='usuario', y='total', 
+                            color='total', color_continuous_scale='Blues')
             fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), height=300)
             st.plotly_chart(fig_bar, use_container_width=True)

@@ -28,7 +28,9 @@ def obtener_recomendacion_ia(datos_triaje):
             "nivel_urgencia": "moderado",
             "conducta_sugerida": "Realizar evaluación médica en las próximas 2 horas. (MODO SIMULACIÓN ACTIVO)",
             "diagnosticos_diferenciales": "Infección respiratoria, deshidratación, ansiedad.",
-            "metodo": "MOCK"
+            "metodo": "MOCK",
+            "prompt_enviado": "MOCK_PROMPT",
+            "respuesta_raw": "MOCK_RESPONSE"
         }
     else:
         try:
@@ -56,6 +58,8 @@ def obtener_recomendacion_ia(datos_triaje):
             content = response.text
             res = json.loads(content)
             res['metodo'] = "GEMINI-AI"
+            res['prompt_enviado'] = prompt
+            res['respuesta_raw'] = content
             return res
             
         except Exception as e:
@@ -63,5 +67,7 @@ def obtener_recomendacion_ia(datos_triaje):
                 "nivel_urgencia": "moderado",
                 "conducta_sugerida": "Error en SDK de Gemini. Evaluar manualmente.",
                 "diagnosticos_diferenciales": f"Error: {str(e)}",
-                "metodo": "ERROR-FALLBACK"
+                "metodo": "ERROR-FALLBACK",
+                "prompt_enviado": prompt if 'prompt' in locals() else "N/A",
+                "respuesta_raw": str(e)
             }

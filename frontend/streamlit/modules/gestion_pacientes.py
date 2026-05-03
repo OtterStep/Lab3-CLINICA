@@ -12,7 +12,7 @@ def show():
     with tab1:
         st.markdown("### 📋 Directorio de Pacientes")
         with get_db_connection() as conn:
-            df = pd.read_sql("SELECT id_paciente, nombre_completo, fecha_nacimiento, genero, contacto, direccion, created_at FROM pacientes ORDER BY created_at DESC", conn)
+            df = pd.read_sql("SELECT id_paciente, nombre_completo, documento_identidad, id_externo_hce, fecha_nacimiento, genero, contacto, created_at FROM pacientes ORDER BY created_at DESC", conn)
         
         if not df.empty:
             # Estilizar el dataframe
@@ -20,10 +20,11 @@ def show():
                 df.rename(columns={
                     'id_paciente': 'ID',
                     'nombre_completo': 'Nombre',
+                    'documento_identidad': 'Documento',
+                    'id_externo_hce': 'ID HCE',
                     'fecha_nacimiento': 'Nacimiento',
                     'genero': 'Género',
                     'contacto': 'Contacto',
-                    'direccion': 'Dirección',
                     'created_at': 'Fecha Registro'
                 }), 
                 use_container_width=True,
@@ -38,8 +39,10 @@ def show():
             c1, c2 = st.columns(2)
             with c1:
                 nombre = st.text_input("Nombre completo")
+                documento = st.text_input("Documento de identidad")
                 fecha_nac = st.date_input("Fecha de nacimiento")
             with c2:
+                id_externo = st.text_input("ID Externo HCE (Opcional)")
                 genero = st.selectbox("Género", ["Masculino", "Femenino", "Otro"])
                 contacto = st.text_input("Contacto (Tel/Email)")
             
@@ -52,9 +55,9 @@ def show():
                         with get_db_connection() as conn:
                             with conn.cursor() as cur:
                                 cur.execute("""
-                                    INSERT INTO pacientes (nombre_completo, fecha_nacimiento, genero, contacto, direccion)
-                                    VALUES (%s, %s, %s, %s, %s)
-                                """, (nombre, fecha_nac, genero, contacto, direccion))
+                                    INSERT INTO pacientes (nombre_completo, documento_identidad, id_externo_hce, fecha_nacimiento, genero, contacto, direccion)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                """, (nombre, documento, id_externo, fecha_nac, genero, contacto, direccion))
                                 conn.commit()
                         st.success(f"✅ Paciente **{nombre}** registrado exitosamente.")
                         registrar_log(st.session_state.user['id_usuario'], "gestión_paciente", f"Registro manual: {nombre}")
@@ -85,8 +88,10 @@ def show():
                     ec1, ec2 = st.columns(2)
                     with ec1:
                         new_nombre = st.text_input("Nombre completo", value=p_data['nombre_completo'])
+                        new_documento = st.text_input("Documento de identidad", value=p_data['documento_identidad'] or "")
                         new_fecha = st.date_input("Fecha de nacimiento", value=p_data['fecha_nacimiento'])
                     with ec2:
+                        new_hce = st.text_input("ID Externo HCE", value=p_data['id_externo_hce'] or "")
                         new_genero = st.selectbox("Género", ["Masculino", "Femenino", "Otro"], 
                                                  index=["Masculino", "Femenino", "Otro"].index(p_data['genero']) if p_data['genero'] in ["Masculino", "Femenino", "Otro"] else 0)
                         new_contacto = st.text_input("Contacto", value=p_data['contacto'] or "")
@@ -100,9 +105,9 @@ def show():
                             with get_db_connection() as conn:
                                 with conn.cursor() as cur:
                                     cur.execute("""
-                                        UPDATE pacientes SET nombre_completo=%s, fecha_nacimiento=%s, genero=%s, contacto=%s, direccion=%s
+                                        UPDATE pacientes SET nombre_completo=%s, documento_identidad=%s, id_externo_hce=%s, fecha_nacimiento=%s, genero=%s, contacto=%s, direccion=%s
                                         WHERE id_paciente=%s
-                                    """, (new_nombre, new_fecha, new_genero, new_contacto, new_direccion, id_p))
+                                    """, (new_nombre, new_documento, new_hce, new_fecha, new_genero, new_contacto, new_direccion, id_p))
                                     conn.commit()
                             st.success("✅ Datos actualizados correctamente.")
                             st.experimental_rerun()
