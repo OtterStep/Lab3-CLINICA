@@ -1,0 +1,120 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "triaje-creado",
+        "options": {}
+      },
+      "name": "Webhook Triaje Creado",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "id": "webhook-triaje"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ia-modelo:8000/predict",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "sintomas",
+              "value": "={{$node[\"Webhook Triaje Creado\"].json[\"sintomas\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "IA Modelo (Predicción)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        350,
+        300
+      ],
+      "id": "http-ia"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "triajes",
+        "data": {
+          "id_paciente": "={{$node[\"Webhook Triaje Creado\"].json[\"paciente_id\"]}}",
+          "sintomas": "={{$node[\"Webhook Triaje Creado\"].json[\"sintomas\"]}}",
+          "nivel_urgencia": "={{$node[\"IA Modelo (Predicción)\"].json[\"prioridad\"]}}",
+          "conducta_sugerida": "={{$node[\"IA Modelo (Predicción)\"].json[\"recomendacion\"]}}"
+        }
+      },
+      "name": "Guardar en PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        600,
+        300
+      ],
+      "id": "postgres-insert"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/rest/oauth2-test/notificacion",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "mensaje",
+              "value": "Nuevo triaje procesado para paciente {{$node[\"Webhook Triaje Creado\"].json[\"paciente_id\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Llamar Workflow Notificación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ],
+      "id": "call-notif"
+    }
+  ],
+  "connections": {
+    "Webhook Triaje Creado": {
+      "main": [
+        [
+          {
+            "node": "IA Modelo (Predicción)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA Modelo (Predicción)": {
+      "main": [
+        [
+          {
+            "node": "Guardar en PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar en PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Llamar Workflow Notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

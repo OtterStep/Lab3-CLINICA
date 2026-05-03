@@ -1,0 +1,84 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM triajes WHERE id_triaje NOT IN (SELECT id_triaje FROM resultados_ia)"
+      },
+      "name": "Consultar Triajes Pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "id": "postgres-query"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://mock-hce:5000/api/hce/sync",
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "paciente_id",
+              "value": "={{$node[\"Consultar Triajes Pendientes\"].json[\"paciente_id\"]}}"
+            },
+            {
+              "name": "resultado_triaje",
+              "value": "={{$node[\"Consultar Triajes Pendientes\"].json[\"resultado\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Sincronizar Mock HCE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "id": "http-hce-sync"
+    },
+    {
+      "parameters": {
+        "chatId": "ID_DE_TU_CHAT",
+        "text": "Triaje sincronizado para el paciente ID: {{$node[\"Consultar Triajes Pendientes\"].json[\"id_paciente\"]}}",
+        "additionalFields": {}
+      },
+      "name": "Notificar Sincronización",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "id": "telegram-sync"
+    }
+  ],
+  "connections": {
+    "Consultar Triajes Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Sincronizar Mock HCE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sincronizar Mock HCE": {
+      "main": [
+        [
+          {
+            "node": "Notificar Sincronización",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "short_name": "Triaje IA",
+  "name": "Dashboard de Triaje Clínico IA",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+}

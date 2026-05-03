@@ -1,0 +1,79 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 8
+            }
+          ]
+        }
+      },
+      "name": "Cron Diario",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "id": "cron-trigger"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as total_triajes, nivel_urgencia FROM triajes WHERE fecha_hora >= NOW() - INTERVAL '1 day' GROUP BY nivel_urgencia"
+      },
+      "name": "Resumen Diario",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ],
+      "id": "postgres-summary"
+    },
+    {
+      "parameters": {
+        "fromEmail": "triaje-ia@clinica.com",
+        "toEmail": "gestion@clinica.com",
+        "subject": "Reporte Diario de Triajes",
+        "text": "Se adjunta el resumen de triajes de las últimas 24 horas.",
+        "additionalFields": {}
+      },
+      "name": "Enviar Email Reporte",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ],
+      "id": "email-report"
+    }
+  ],
+  "connections": {
+    "Cron Diario": {
+      "main": [
+        [
+          {
+            "node": "Resumen Diario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumen Diario": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

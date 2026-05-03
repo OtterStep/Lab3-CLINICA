@@ -1,0 +1,61 @@
+# Sistemas operativos
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores de código
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# Logs y bases de datos
+*.log
+*.sql
+*.sqlite
+
+# Archivos de dependencias y paquetes
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Entornos virtuales
+env/
+venv/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+out/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+*.class
+
+# Archivos de prueba y cobertura
+coverage/
+.coverage
+*.cover
+*.test
+
+# Archivos de desarrollo local
+*.local
+*.secret
+*.key
+
+# Archivos de backup
+*.bak
+*.tmp
+*.temp
