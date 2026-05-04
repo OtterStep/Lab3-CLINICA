@@ -92,7 +92,7 @@ def show():
                                         """, (n_urgencia, n_conducta, n_sintomas, n_pa_s, n_pa_d, n_fc, n_temp, n_sat, triaje['id_triaje']))
                                         conn.commit()
                                 st.success("Triaje actualizado")
-                                st.experimental_rerun()
+                                st.rerun()
             else:
                 st.warning("No hay triajes registrados para este paciente.")
         else:
@@ -167,24 +167,35 @@ def show():
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
                         if st.form_submit_button("🔄 Actualizar Datos"):
-                            with get_db_connection() as conn:
-                                with conn.cursor() as cur:
-                                    cur.execute("""
-                                        UPDATE pacientes SET nombre_completo=%s, documento_identidad=%s, id_externo_hce=%s, fecha_nacimiento=%s, genero=%s, contacto=%s, direccion=%s
-                                        WHERE id_paciente=%s
-                                    """, (new_nombre, new_documento, new_hce, new_fecha, new_genero, new_contacto, new_direccion, id_p))
-                                    conn.commit()
-                            st.success("✅ Datos actualizados correctamente.")
-                            st.experimental_rerun()
+                            try:
+                                # Asegurar que el ID sea un entero nativo de Python
+                                id_paciente_standard = int(id_p)
+                                with get_db_connection() as conn:
+                                    with conn.cursor() as cur:
+                                        cur.execute("""
+                                            UPDATE pacientes SET nombre_completo=%s, documento_identidad=%s, id_externo_hce=%s, fecha_nacimiento=%s, genero=%s, contacto=%s, direccion=%s
+                                            WHERE id_paciente=%s
+                                        """, (new_nombre, new_documento, new_hce, new_fecha, new_genero, new_contacto, new_direccion, id_paciente_standard))
+                                        conn.commit()
+                                st.success("✅ Datos actualizados correctamente.")
+                                # Usar un pequeño delay o simplemente dejar que el usuario vea el mensaje antes de recargar
+                                # O mejor aún, no forzar el rerun inmediato si causa problemas
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar: {e}")
                     
                     with col_btn2:
                         confirmar = st.checkbox("⚠️ Confirmar eliminación definitiva")
                         if st.form_submit_button("🗑️ Eliminar Paciente") and confirmar:
-                            with get_db_connection() as conn:
-                                with conn.cursor() as cur:
-                                    cur.execute("DELETE FROM pacientes WHERE id_paciente=%s", (id_p,))
-                                    conn.commit()
-                            st.error("🗑️ Registro eliminado.")
-                            st.experimental_rerun()
+                            try:
+                                id_paciente_standard = int(id_p)
+                                with get_db_connection() as conn:
+                                    with conn.cursor() as cur:
+                                        cur.execute("DELETE FROM pacientes WHERE id_paciente=%s", (id_paciente_standard,))
+                                        conn.commit()
+                                st.error("🗑️ Registro eliminado.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al eliminar: {e}")
         else:
             st.info("ℹ️ No hay registros de pacientes para gestionar.")

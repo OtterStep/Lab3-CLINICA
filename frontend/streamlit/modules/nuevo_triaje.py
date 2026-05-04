@@ -10,6 +10,96 @@ def show():
     st.markdown('<h1 style="text-align: center;">➕ Nuevo Registro de Triaje</h1>', unsafe_allow_html=True)
     st.markdown("---")
 
+    # Si ya hay una recomendación en la sesión, mostramos el resultado directamente
+    if 'recomendacion_ia' in st.session_state:
+        recomendacion = st.session_state.recomendacion_ia
+        datos_triaje = st.session_state.datos_evaluacion
+        id_paciente_triaje = st.session_state.id_paciente_triaje
+
+        # Resultado del análisis
+        st.markdown("### 🚩 Resultado del Análisis de Triaje")
+        
+        # --- SECCIÓN DE ALERTAS (AHORA VISIBLE CUANDO HAY RESULTADO) ---
+        if recomendacion['nivel_urgencia'].lower() in ['alto', 'crítico']:
+            st.warning(f"⚠️ **ATENCIÓN:** El nivel de urgencia detectado es {recomendacion['nivel_urgencia'].upper()}.")
+            
+            with get_db_connection() as conn:
+                doctores_df = pd.read_sql("SELECT nombre_usuario, telegram_chat_id FROM usuarios WHERE telegram_chat_id IS NOT NULL", conn)
+            
+            if not doctores_df.empty:
+                col_doc1, col_doc2 = st.columns([2, 1])
+                with col_doc1:
+                    doctor_notif = st.selectbox("🏥 Seleccione Doctor para enviar ALERTA INMEDIATA", 
+                                               options=doctores_df['nombre_usuario'].tolist(),
+                                               key="doctor_alerta_sel")
+                
+                chat_id_notif = doctores_df[doctores_df['nombre_usuario'] == doctor_notif]['telegram_chat_id'].iloc[0]
+                
+                with col_doc2:
+                    st.write("") # Espaciador
+                    st.write("") # Espaciador
+                    if st.button("🚨 ENVIAR ALERTA", use_container_width=True, type="primary"):
+                        with st.status("📡 Enviando alerta prioritaria...", expanded=True) as status:
+                            try:
+                                with get_db_connection() as conn:
+                                    with conn.cursor() as cur:
+                                        cur.execute("SELECT nombre_completo FROM pacientes WHERE id_paciente = %s", (id_paciente_triaje,))
+                                        nombre_p_notif = cur.fetchone()[0]
+
+                                mensaje_notif = f"🚨 *ALERTA DE TRIAJE {recomendacion['nivel_urgencia'].upper()}*\n\n"
+                                mensaje_notif += f"👤 *Paciente:* {nombre_p_notif} (ID: {id_paciente_triaje})\n"
+                                mensaje_notif += f"📝 *Síntomas:* {datos_triaje['sintomas'][:100]}...\n"
+                                mensaje_notif += f"🩺 *Signos:* PA {datos_triaje['presion_arterial_sist']}/{datos_triaje['presion_arterial_diast']}, FC {datos_triaje['frecuencia_cardiaca']}, Temp {datos_triaje['temperatura']}, Sat {datos_triaje['saturacion_oxigeno']}%\n"
+                                mensaje_notif += f"🩺 *Diagnóstico IA:* {recomendacion['diagnosticos_diferenciales']}\n\n"
+                                
+                                response = requests.post("http://n8n:5678/webhook/notificacion", 
+                                             json={
+                                                 "chat_id": str(chat_id_notif), 
+                                                 "mensaje": mensaje_notif,
+                                                 "paciente_nombre": nombre_p_notif,
+                                                 "signos_vitales": {
+                                                     "pa": f"{datos_triaje['presion_arterial_sist']}/{datos_triaje['presion_arterial_diast']}",
+                                                     "fc": int(datos_triaje['frecuencia_cardiaca']),
+                                                     "temp": float(datos_triaje['temperatura']),
+                                                     "sat": int(datos_triaje['saturacion_oxigeno'])
+                                                 }
+                                             }, 
+                                             timeout=10)
+                                if response.status_code in [200, 201]:
+                                    status.update(label=f"✅ Alerta enviada a {doctor_notif}", state="complete", expanded=False)
+                                else:
+                                    status.update(label="❌ Error al enviar alerta", state="error")
+                            except Exception as e:
+                                st.error(f"Error de conexión n8n: {e}")
+            else:
+                st.info("ℹ️ No hay doctores configurados para recibir alertas.")
+        else:
+            st.success("✅ Triaje guardado correctamente. Nivel de urgencia estable.")
+
+        # Mostrar tarjetas de resultados (diseño previo)
+        res_col1, res_col2 = st.columns([1, 2])
+        color_urgencia = {"crítico": "red", "alto": "orange", "moderado": "blue", "bajo": "green"}.get(recomendacion['nivel_urgencia'].lower(), "gray")
+        
+        with res_col1:
+            st.markdown(f"""
+                <div style="background-color: {color_urgencia}; padding: 20px; border-radius: 10px; color: white; text-align: center;">
+                    <h2 style="color: white; margin: 0;">NIVEL IA</h2>
+                    <h1 style="color: white; margin: 10px 0;">{recomendacion['nivel_urgencia'].upper()}</h1>
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with res_col2:
+            st.info(f"💡 **Conducta Sugerida:** {recomendacion['conducta_sugerida']}")
+            st.warning(f"🔍 **Diagnósticos Diferenciales:** {recomendacion['diagnosticos_diferenciales']}")
+
+        if st.button("🔄 Realizar Nuevo Triaje"):
+            del st.session_state.recomendacion_ia
+            del st.session_state.datos_evaluacion
+            del st.session_state.id_paciente_triaje
+            st.rerun()
+            
+        return # Salir para no mostrar el formulario de nuevo
+
     # Selección de paciente con diseño mejorado
     with st.container():
         col_opt1, col_opt2 = st.columns([1, 1])
@@ -96,16 +186,7 @@ def show():
                 errores_validacion = []
                 if saturacion < 90:
                     errores_validacion.append("🚨 Saturación de oxígeno crítica (< 90%).")
-                if presion_sist > 180 or presion_sist < 90:
-                    st.warning("⚠️ Presión sistólica fuera de rangos normales.")
-                if temperatura > 39 or temperatura < 35:
-                    st.warning("⚠️ Temperatura corporal fuera de rangos normales.")
-
-                if errores_validacion:
-                    for err in errores_validacion:
-                        st.error(err)
-                    st.info("ℹ️ Proceda con precaución extrema. Se recomienda atención inmediata.")
-
+                
                 datos_triaje = {
                     'presion_arterial_sist': presion_sist,
                     'presion_arterial_diast': presion_diast,
@@ -118,72 +199,36 @@ def show():
                 with st.spinner("🧠 La IA está analizando los datos..."):
                     recomendacion = obtener_recomendacion_ia(datos_triaje)
                 
-                # --- NOTIFICACIÓN INMEDIATA TRAS ANÁLISIS IA ---
-                if recomendacion['nivel_urgencia'].lower() in ['alto', 'crítico']:
-                    st.warning(f"⚠️ **ATENCIÓN:** El nivel de urgencia es {recomendacion['nivel_urgencia'].upper()}.")
-                    
-                    # Obtener lista de doctores con Chat ID
-                    with get_db_connection() as conn:
-                        doctores_df = pd.read_sql("SELECT nombre_usuario, telegram_chat_id FROM usuarios WHERE telegram_chat_id IS NOT NULL", conn)
-                    
-                    if not doctores_df.empty:
-                        doctor_notif = st.selectbox("🏥 Seleccione Doctor para enviar ALERTA INMEDIATA", 
-                                                   options=doctores_df['nombre_usuario'].tolist(),
-                                                   key="doctor_alerta_sel")
-                        chat_id_notif = doctores_df[doctores_df['nombre_usuario'] == doctor_notif]['telegram_chat_id'].iloc[0]
-                        
-                        if st.button("🚨 ENVIAR ALERTA AHORA", use_container_width=True):
-                            with st.status("📡 Enviando alerta prioritaria...", expanded=True) as status:
-                                try:
-                                    # Obtener nombre del paciente para la notificación
-                                    with get_db_connection() as conn:
-                                        with conn.cursor() as cur:
-                                            cur.execute("SELECT nombre_completo FROM pacientes WHERE id_paciente = %s", (id_paciente,))
-                                            nombre_p_notif = cur.fetchone()[0]
+                # --- GUARDAR EN DB ANTES DE RERUN ---
+                try:
+                    # Preparar datos para guardar
+                    data_to_save = {
+                        **datos_triaje,
+                        'id_paciente': id_paciente,
+                        'id_usuario': st.session_state.user['id_usuario'],
+                        'nivel_urgencia': recomendacion['nivel_urgencia'],
+                        'nivel_urgencia_usuario': recomendacion['nivel_urgencia'], # Por defecto igual que IA
+                        'conducta_sugerida': recomendacion['conducta_sugerida'],
+                        'resultado_ia': {
+                            **recomendacion,
+                            'prompt_enviado': 'Generado por sistema', # Opcional: podrías guardar el prompt real
+                            'respuesta_raw': json.dumps(recomendacion)
+                        }
+                    }
+                    guardar_triaje(data_to_save)
+                    registrar_log(st.session_state.user['id_usuario'], "registro_triaje", f"Triaje guardado para paciente ID {id_paciente}")
+                except Exception as e:
+                    st.error(f"❌ Error al guardar en base de datos: {e}")
 
-                                    # Construcción del mensaje detallado solicitado
-                                    mensaje_notif = f"🚨 *ALERTA DE TRIAJE {recomendacion['nivel_urgencia'].upper()}*\n\n"
-                                    mensaje_notif += f"👤 *Paciente:* {nombre_p_notif} (ID: {id_paciente})\n"
-                                    mensaje_notif += f"📝 *Síntomas:* {datos_triaje['sintomas'][:100]}...\n"
-                                    mensaje_notif += f"🩺 *Signos:* PA {presion_sist}/{presion_diast}, FC {frecuencia}, Temp {temperatura}, Sat {saturacion}%\n"
-                                    mensaje_notif += f"🩺 *Diagnóstico IA:* {recomendacion['diagnosticos_diferenciales']}\n\n"
-                                    
-                                    response = requests.post("http://n8n:5678/webhook/notificacion", 
-                                                 json={
-                                                     "chat_id": str(chat_id_notif), 
-                                                     "mensaje": mensaje_notif,
-                                                     "paciente_nombre": nombre_p_notif,
-                                                     "signos_vitales": {
-                                                         "pa": f"{presion_sist}/{presion_diast}",
-                                                         "fc": int(frecuencia),
-                                                         "temp": float(temperatura),
-                                                         "sat": int(saturacion)
-                                                     }
-                                                 }, 
-                                                 timeout=10)
-                                    if response.status_code in [200, 201]:
-                                        status.update(label=f"✅ Alerta enviada a {doctor_notif}", state="complete", expanded=False)
-                                    else:
-                                        status.update(label="❌ Error al enviar alerta", state="error")
-                                except Exception as e:
-                                    st.error(f"Error de conexión n8n: {e}")
-                    else:
-                        st.info("ℹ️ No hay doctores configurados para recibir alertas automáticas.")
-                else:
-                    st.success("✅ Triaje guardado correctamente. Nivel de urgencia estable.")
-
-                # Guardar resultado en session_state para persistir
+                # Guardar resultado en session_state para persistir y manejar fuera del form
                 st.session_state.recomendacion_ia = recomendacion
                 st.session_state.datos_evaluacion = datos_triaje
+                st.session_state.id_paciente_triaje = id_paciente
+                st.rerun()
 
-        # Si ya hay una recomendación
-        if 'recomendacion_ia' in st.session_state:
-            recomendacion = st.session_state.recomendacion_ia
-            datos_triaje = st.session_state.datos_evaluacion
-
-            # Resultado del análisis
-            st.markdown("---")
-            st.markdown("### 🚩 Resultado del Análisis de Triaje")
+        # --- SECCIÓN DE ALERTAS (FUERA DEL FORMULARIO) ---
+        if 'recomendacion_ia_old' in st.session_state:
+            pass # Eliminado porque ahora se maneja al principio del archivo
             
             res_col1, res_col2 = st.columns([1, 2])
             

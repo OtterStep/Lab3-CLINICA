@@ -113,7 +113,7 @@ def show():
                                             """, (edit_username, edit_rol, edit_email, edit_chatid, id_u))
                                         conn.commit()
                                 st.success("✅ Usuario actualizado.")
-                                st.experimental_rerun()
+                                st.rerun()
                             except Exception as e:
                                 st.error(f"❌ Error: {e}")
                     
@@ -128,4 +128,4 @@ def show():
                                         cur.execute("DELETE FROM usuarios WHERE id_usuario=%s", (id_u,))
                                         conn.commit()
                                 st.error("🗑️ Usuario eliminado.")
-                                st.experimental_rerun()
+                                st.rerun()
