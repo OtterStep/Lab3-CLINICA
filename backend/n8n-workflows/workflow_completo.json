@@ -42,7 +42,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT \n    COUNT(*) as total_triajes,\n    COUNT(CASE WHEN nivel_urgencia = 'crítico' THEN 1 END) as criticos,\n    COUNT(CASE WHEN nivel_urgencia = 'alto' THEN 1 END) as altos\nFROM triajes \nWHERE fecha_hora >= NOW() - INTERVAL '1 day';",
+        "query": "SELECT \n    COUNT(DISTINCT id_paciente) as total_triajes,\n    COUNT(CASE WHEN nivel_urgencia = 'crítico' THEN 1 END) as criticos,\n    COUNT(CASE WHEN nivel_urgencia = 'alto' THEN 1 END) as altos\nFROM (\n    SELECT DISTINCT ON (id_paciente) id_paciente, nivel_urgencia, fecha_hora\n    FROM triajes \n    WHERE fecha_hora >= NOW() - INTERVAL '1 day'\n    ORDER BY id_paciente, fecha_hora DESC\n) as ultimos_triajes;",
         "additionalFields": {}
       },
       "name": "Resumen Diario",

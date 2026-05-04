@@ -20,15 +20,22 @@ def show():
     if st.button("📤 Enviar Reporte de Hoy al Doctor", use_container_width=True):
         with get_db_connection() as conn:
             query = """
-                SELECT p.nombre_completo as nombre, t.nivel_urgencia as urgencia, 
-                       LEFT(t.conducta_sugerida, 50) as diagnostico
-                FROM triajes t
-                JOIN pacientes p ON t.id_paciente = p.id_paciente
-                WHERE t.fecha_hora::date = CURRENT_DATE
+                SELECT nombre, urgencia, diagnostico
+                FROM (
+                    SELECT DISTINCT ON (t.id_paciente) 
+                        p.nombre_completo as nombre, 
+                        t.nivel_urgencia as urgencia, 
+                        LEFT(t.conducta_sugerida, 50) as diagnostico,
+                        t.fecha_hora
+                    FROM triajes t
+                    JOIN pacientes p ON t.id_paciente = p.id_paciente
+                    WHERE t.fecha_hora::date = CURRENT_DATE
+                    ORDER BY t.id_paciente, t.fecha_hora DESC
+                ) as ultimos_triajes
                 ORDER BY CASE 
-                    WHEN t.nivel_urgencia = 'crítico' THEN 1
-                    WHEN t.nivel_urgencia = 'alto' THEN 2
-                    WHEN t.nivel_urgencia = 'moderado' THEN 3
+                    WHEN urgencia = 'crítico' THEN 1
+                    WHEN urgencia = 'alto' THEN 2
+                    WHEN urgencia = 'moderado' THEN 3
                     ELSE 4 END
             """
             df_hoy = pd.read_sql(query, conn)
