@@ -17,50 +17,63 @@ def show():
     
     # --- SECCIÓN DE ENVÍO A DOCTOR ---
     st.markdown("### 👨‍⚕️ Notificar al Doctor")
-    if st.button("📤 Enviar Reporte de Hoy al Doctor", use_container_width=True):
-        with get_db_connection() as conn:
-            query = """
-                SELECT nombre, urgencia, diagnostico
-                FROM (
-                    SELECT DISTINCT ON (t.id_paciente) 
-                        p.nombre_completo as nombre, 
-                        t.nivel_urgencia as urgencia, 
-                        LEFT(t.conducta_sugerida, 50) as diagnostico,
-                        t.fecha_hora
-                    FROM triajes t
-                    JOIN pacientes p ON t.id_paciente = p.id_paciente
-                    WHERE t.fecha_hora::date = CURRENT_DATE
-                    ORDER BY t.id_paciente, t.fecha_hora DESC
-                ) as ultimos_triajes
-                ORDER BY CASE 
-                    WHEN urgencia = 'crítico' THEN 1
-                    WHEN urgencia = 'alto' THEN 2
-                    WHEN urgencia = 'moderado' THEN 3
-                    ELSE 4 END
-            """
-            df_hoy = pd.read_sql(query, conn)
-            
-        if not df_hoy.empty:
-            lista_pacientes = df_hoy.to_dict('records')
-            try:
-                # Webhook para el reporte grupal al doctor
-                response = requests.post(
-                    "http://n8n:5678/webhook/reporte-doctor",
-                    json={
-                        "doctor_id": "DR_GENERAL",
-                        "fecha": datetime.now().strftime('%d/%m/%Y'),
-                        "pacientes": lista_pacientes
-                    },
-                    timeout=10
-                )
-                if response.status_code in [200, 201]:
-                    st.success(f"✅ Reporte enviado con éxito ({len(lista_pacientes)} pacientes)")
-                else:
-                    st.error("❌ Error al contactar con el servicio de n8n")
-            except Exception as e:
-                st.error(f"❌ Error de conexión: {e}")
-        else:
-            st.warning("⚠️ No hay triajes registrados el día de hoy para reportar.")
+    
+    # Obtener lista de doctores con Chat ID
+    with get_db_connection() as conn:
+        doctores_df = pd.read_sql("SELECT nombre_usuario, telegram_chat_id FROM usuarios WHERE telegram_chat_id IS NOT NULL", conn)
+    
+    if not doctores_df.empty:
+        doctor_sel = st.selectbox("Seleccione Doctor para enviar el reporte", 
+                                 options=doctores_df['nombre_usuario'].tolist())
+        chat_id_doctor = doctores_df[doctores_df['nombre_usuario'] == doctor_sel]['telegram_chat_id'].iloc[0]
+
+        if st.button("📤 Enviar Reporte de Hoy al Doctor", use_container_width=True):
+            with get_db_connection() as conn:
+                query = """
+                    SELECT nombre, urgencia, diagnostico
+                    FROM (
+                        SELECT DISTINCT ON (t.id_paciente) 
+                            p.nombre_completo as nombre, 
+                            t.nivel_urgencia as urgencia, 
+                            LEFT(t.conducta_sugerida, 50) as diagnostico,
+                            t.fecha_hora
+                        FROM triajes t
+                        JOIN pacientes p ON t.id_paciente = p.id_paciente
+                        WHERE t.fecha_hora::date = CURRENT_DATE
+                        ORDER BY t.id_paciente, t.fecha_hora DESC
+                    ) as ultimos_triajes
+                    ORDER BY CASE 
+                        WHEN urgencia = 'crítico' THEN 1
+                        WHEN urgencia = 'alto' THEN 2
+                        WHEN urgencia = 'moderado' THEN 3
+                        ELSE 4 END
+                """
+                df_hoy = pd.read_sql(query, conn)
+                
+            if not df_hoy.empty:
+                lista_pacientes = df_hoy.to_dict('records')
+                try:
+                    # Webhook para el reporte grupal al doctor con chat_id dinámico
+                    response = requests.post(
+                        "http://n8n:5678/webhook/reporte-doctor",
+                        json={
+                            "chat_id": str(chat_id_doctor),
+                            "doctor_nombre": doctor_sel,
+                            "fecha": datetime.now().strftime('%d/%m/%Y'),
+                            "pacientes": lista_pacientes
+                        },
+                        timeout=10
+                    )
+                    if response.status_code in [200, 201]:
+                        st.success(f"✅ Reporte enviado a {doctor_sel} ({len(lista_pacientes)} pacientes)")
+                    else:
+                        st.error("❌ Error al contactar con el servicio de n8n")
+                except Exception as e:
+                    st.error(f"❌ Error de conexión: {e}")
+            else:
+                st.warning("⚠️ No hay triajes registrados el día de hoy para reportar.")
+    else:
+        st.info("ℹ️ No hay doctores con Telegram configurado en el sistema.")
     
     st.markdown("---")
     st.markdown("### 📄 Exportar PDF")

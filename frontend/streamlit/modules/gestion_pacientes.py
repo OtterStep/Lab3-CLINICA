@@ -9,6 +9,7 @@ def show():
 
     tab1, tab2, tab3, tab4 = st.tabs(["📋 Directorio de Pacientes", "➕ Nuevo Registro", "⚙️ Mantenimiento", "🩺 Gestión de Triajes"])
 
+
     with tab1:
         st.markdown("### 📋 Directorio de Pacientes")
         with get_db_connection() as conn:

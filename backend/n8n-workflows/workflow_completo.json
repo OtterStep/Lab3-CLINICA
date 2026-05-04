@@ -196,7 +196,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = items[0].json.body;\nlet mensaje = `📋 *Reporte de Triajes - ${data.fecha}*\\n\\n`;\n\ndata.pacientes.forEach(p => {\n    mensaje += `👤 *${p.nombre}*\\n   🚩 Urgencia: ${p.urgencia.toUpperCase()}\\n   🩺 Obs: ${p.diagnostico}...\\n\\n`;\n});\n\nreturn [{json: {mensaje}}];"
+        "jsCode": "const data = items[0].json.body;\nlet mensaje = `📋 *Reporte de Triajes - ${data.fecha}*\\n\\n`;\n\ndata.pacientes.forEach(p => {\n    mensaje += `👤 *${p.nombre}*\\n   🚩 Urgencia: ${p.urgencia.toUpperCase()}\\n   🩺 Obs: ${p.diagnostico}...\\n\\n`;\n});\n\nreturn [{json: {mensaje, chat_id: data.chat_id}}];"
       },
       "name": "Formatear Reporte Doctor",
       "type": "n8n-nodes-base.code",
@@ -209,7 +209,7 @@
     },
     {
       "parameters": {
-        "chatId": "TU_CHAT_ID_DOCTOR",
+        "chatId": "={{ $json.chat_id }}",
         "text": "={{ $json.mensaje }}",
         "additionalFields": {
           "parseMode": "Markdown"

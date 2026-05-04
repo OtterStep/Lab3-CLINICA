@@ -122,7 +122,7 @@ st.sidebar.markdown("---")
 
 menu = st.sidebar.selectbox(
     "Navegación", 
-    ["➕ Nuevo Triaje", "👥 Gestor de Pacientes", "📊 Dashboard Operacional", "📈 Dashboard Gestión", "📄 Reportes PDF"]
+    ["➕ Nuevo Triaje", "👥 Gestor de Pacientes", "👨‍⚕️ Gestión de Médicos", "📊 Dashboard Operacional", "📈 Dashboard Gestión", "📄 Reportes PDF"]
 )
 
 st.sidebar.markdown("---")
@@ -146,6 +146,9 @@ if "Nuevo Triaje" in menu:
 elif "Gestor de Pacientes" in menu:
     from modules import gestion_pacientes
     gestion_pacientes.show()
+elif "Gestión de Médicos" in menu:
+    from modules import gestion_usuarios
+    gestion_usuarios.show()
 elif "Dashboard Operacional" in menu:
     from modules.dashboard_operativo import show
     show()

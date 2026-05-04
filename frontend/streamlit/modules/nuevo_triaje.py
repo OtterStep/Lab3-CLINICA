@@ -25,7 +25,8 @@ def show():
                 # Mostrar también el documento de identidad para facilitar la búsqueda
                 pacientes_df['display_name'] = pacientes_df['nombre_completo'] + " (" + pacientes_df['documento_identidad'].fillna("Sin Doc") + ")"
                 paciente_seleccionado = st.selectbox("Seleccione el paciente de la lista", pacientes_df['display_name'].tolist())
-                id_paciente = pacientes_df[pacientes_df['display_name'] == paciente_seleccionado]['id_paciente'].iloc[0]
+                # Asegurar que el id_paciente sea un int estándar de Python, no numpy.int64
+                id_paciente = int(pacientes_df[pacientes_df['display_name'] == paciente_seleccionado]['id_paciente'].iloc[0])
                 
                 # Antecedentes con mejor diseño
                 try:
@@ -119,44 +120,57 @@ def show():
                 
                 # --- NOTIFICACIÓN INMEDIATA TRAS ANÁLISIS IA ---
                 if recomendacion['nivel_urgencia'].lower() in ['alto', 'crítico']:
-                    with st.status("📡 Enviando alerta prioritaria (IA)...", expanded=True) as status:
-                        try:
-                            chat_id = st.session_state.user.get('telegram_chat_id')
-                            # Obtener nombre del paciente para la notificación
-                            with get_db_connection() as conn:
-                                with conn.cursor() as cur:
-                                    cur.execute("SELECT nombre_completo FROM pacientes WHERE id_paciente = %s", (id_paciente,))
-                                    nombre_p_notif = cur.fetchone()[0]
+                    st.warning(f"⚠️ **ATENCIÓN:** El nivel de urgencia es {recomendacion['nivel_urgencia'].upper()}.")
+                    
+                    # Obtener lista de doctores con Chat ID
+                    with get_db_connection() as conn:
+                        doctores_df = pd.read_sql("SELECT nombre_usuario, telegram_chat_id FROM usuarios WHERE telegram_chat_id IS NOT NULL", conn)
+                    
+                    if not doctores_df.empty:
+                        doctor_notif = st.selectbox("🏥 Seleccione Doctor para enviar ALERTA INMEDIATA", 
+                                                   options=doctores_df['nombre_usuario'].tolist(),
+                                                   key="doctor_alerta_sel")
+                        chat_id_notif = doctores_df[doctores_df['nombre_usuario'] == doctor_notif]['telegram_chat_id'].iloc[0]
+                        
+                        if st.button("🚨 ENVIAR ALERTA AHORA", use_container_width=True):
+                            with st.status("📡 Enviando alerta prioritaria...", expanded=True) as status:
+                                try:
+                                    # Obtener nombre del paciente para la notificación
+                                    with get_db_connection() as conn:
+                                        with conn.cursor() as cur:
+                                            cur.execute("SELECT nombre_completo FROM pacientes WHERE id_paciente = %s", (id_paciente,))
+                                            nombre_p_notif = cur.fetchone()[0]
 
-                            if chat_id:
-                                # Construcción del mensaje detallado solicitado
-                                mensaje_notif = f"🚨 *ALERTA DE TRIAJE {recomendacion['nivel_urgencia'].upper()}*\n\n"
-                                mensaje_notif += f"👤 *Paciente:* {nombre_p_notif} (ID: {id_paciente})\n"
-                                mensaje_notif += f"📝 *Síntomas:* {datos_triaje['sintomas'][:100]}...\n"
-                                mensaje_notif += f"🩺 *Signos:* PA {presion_sist}/{presion_diast}, FC {frecuencia}, Temp {temperatura}, Sat {saturacion}%\n"
-                                mensaje_notif += f"🩺 *Diagnóstico IA:* {recomendacion['diagnosticos_diferenciales']}\n\n"
-                                mensaje_notif += f"⚠️ _Si el diagnóstico es incorrecto, por favor corregirlo en el panel de gestión._"
-                                
-                                response = requests.post("http://n8n:5678/webhook/notificacion", 
-                                             json={
-                                                 "chat_id": str(chat_id), 
-                                                 "mensaje": mensaje_notif,
-                                                 "paciente_nombre": nombre_p_notif,
-                                                 "signos_vitales": {
-                                                     "pa": f"{presion_sist}/{presion_diast}",
-                                                     "fc": frecuencia,
-                                                     "temp": temperatura,
-                                                     "sat": saturacion
-                                                 }
-                                             }, 
-                                             timeout=10)
-                                if response.status_code in [200, 201]:
-                                    st.toast("🔔 Alerta enviada a Telegram", icon="🚨")
-                                    status.update(label="✅ Alerta de Telegram enviada!", state="complete")
-                            else:
-                                status.update(label="⚠️ No se envió alerta: Usuario sin Chat ID", state="error")
-                        except Exception as e:
-                            status.update(label=f"⚠️ Error de conexión n8n: {e}", state="error")
+                                    # Construcción del mensaje detallado solicitado
+                                    mensaje_notif = f"🚨 *ALERTA DE TRIAJE {recomendacion['nivel_urgencia'].upper()}*\n\n"
+                                    mensaje_notif += f"👤 *Paciente:* {nombre_p_notif} (ID: {id_paciente})\n"
+                                    mensaje_notif += f"📝 *Síntomas:* {datos_triaje['sintomas'][:100]}...\n"
+                                    mensaje_notif += f"🩺 *Signos:* PA {presion_sist}/{presion_diast}, FC {frecuencia}, Temp {temperatura}, Sat {saturacion}%\n"
+                                    mensaje_notif += f"🩺 *Diagnóstico IA:* {recomendacion['diagnosticos_diferenciales']}\n\n"
+                                    
+                                    response = requests.post("http://n8n:5678/webhook/notificacion", 
+                                                 json={
+                                                     "chat_id": str(chat_id_notif), 
+                                                     "mensaje": mensaje_notif,
+                                                     "paciente_nombre": nombre_p_notif,
+                                                     "signos_vitales": {
+                                                         "pa": f"{presion_sist}/{presion_diast}",
+                                                         "fc": int(frecuencia),
+                                                         "temp": float(temperatura),
+                                                         "sat": int(saturacion)
+                                                     }
+                                                 }, 
+                                                 timeout=10)
+                                    if response.status_code in [200, 201]:
+                                        status.update(label=f"✅ Alerta enviada a {doctor_notif}", state="complete", expanded=False)
+                                    else:
+                                        status.update(label="❌ Error al enviar alerta", state="error")
+                                except Exception as e:
+                                    st.error(f"Error de conexión n8n: {e}")
+                    else:
+                        st.info("ℹ️ No hay doctores configurados para recibir alertas automáticas.")
+                else:
+                    st.success("✅ Triaje guardado correctamente. Nivel de urgencia estable.")
 
                 # Guardar resultado en session_state para persistir
                 st.session_state.recomendacion_ia = recomendacion
