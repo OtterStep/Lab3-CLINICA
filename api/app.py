@@ -175,5 +175,24 @@ def top_pacientes():
             top = cur.fetchall()
     return jsonify(top)
 
+@app.route('/api/pacientes/buscar', methods=['GET'])
+def buscar_paciente():
+    """Busca un paciente por DNI."""
+    dni = request.args.get('dni')
+    if not dni:
+        return jsonify({'error': 'DNI es requerido'}), 400
+    with get_db_connection() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT p.*, 
+                       (SELECT nivel_urgencia FROM triajes WHERE id_paciente = p.id_paciente ORDER BY fecha_hora DESC LIMIT 1) as ultima_urgencia
+                FROM pacientes p 
+                WHERE p.documento_identidad = %s
+            """, (dni,))
+            paciente = cur.fetchone()
+    if not paciente:
+        return jsonify({'error': 'Paciente no encontrado'}), 404
+    return jsonify(paciente)
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

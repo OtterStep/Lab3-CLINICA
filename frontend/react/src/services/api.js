@@ -5,3 +5,4 @@ const API_BASE = '/api';
 export const getResumenOperativo = () => axios.get(`${API_BASE}/operativo/resumen`);
 export const getMetricasGestion = (periodo = 'mes') => axios.get(`${API_BASE}/gestion/metricas?periodo=${periodo}`);
 export const getTopPacientes = () => axios.get(`${API_BASE}/pacientes/top`);
+export const buscarPacientePorDni = (dni) => axios.get(`${API_BASE}/pacientes/buscar?dni=${dni}`);

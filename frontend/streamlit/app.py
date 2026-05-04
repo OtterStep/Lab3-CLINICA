@@ -19,13 +19,24 @@ st.markdown("""
     }
     
     .main {
-        background-color: #f8fafc;
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        color: white;
     }
     
     /* Mejorar la barra lateral */
     [data-testid="stSidebar"] {
-        background-color: #ffffff;
-        border-right: 1px solid #e2e8f0;
+        background-color: #0f172a;
+        border-right: 1px solid #1e293b;
+        color: white;
+    }
+
+    [data-testid="stSidebar"] .stMarkdown p {
+        color: #e2e8f0;
+    }
+
+    /* Estilo para los títulos en el fondo oscuro */
+    .main h1, .main h2, .main h3 {
+        color: #ffffff !important;
     }
     
     /* Botones personalizados */
@@ -105,6 +116,7 @@ if not st.session_state.authenticated:
 
 # Sidebar con menú mejorado
 st.sidebar.markdown(f"## 🏥 Triaje IA")
+st.sidebar.caption("v1.3.0-PRO (Build 20260504)")
 st.sidebar.markdown(f"**Bienvenido, {st.session_state.user['nombre_usuario']}**")
 st.sidebar.markdown("---")
 

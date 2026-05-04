@@ -1,25 +1,22 @@
 # Sistema de Triaje Clínico Asistido por IA
 
+Para una guía detallada de configuración paso a paso, consulta:
+👉 **[GUIA_INSTALACION.md](file:///c:/Users/Zaleth/Downloads/Lab03.%20Sistema%20de%20Triaje%20Cl%C3%ADnico%20Asistido%20por%20IA%20-%20copia/Lab03.%20Sistema%20de%20Triaje%20Cl%C3%ADnico%20Asistido%20por%20IA/Lab3-CLINICA/GUIA_INSTALACION.md)**
+
 ## Prerrequisitos
 - Docker y Docker Compose
-- Python 3.10+ (solo si se ejecuta fuera de Docker)
-- Cuenta de Google AI (Gemini API) (opcional, para IA real)
+- Cuenta de Google AI (Gemini API)
+- n8n para automatizaciones (incluido en Docker)
 
-## Configuración inicial
-1. Clonar el repositorio:
+## Inicio Rápido
+1. Configura tu `.env` con tu `GOOGLE_API_KEY`.
+2. Levanta el sistema:
    ```bash
-   git clone https://github.com/tu-usuario/triage-ia.git
-   cd triage-ia
+   docker-compose up -d --build
    ```
-2. Copiar `.env.example` a `.env` y editar las variables necesarias (especialmente `GOOGLE_API_KEY` si se desea usar IA real).
-3.	Levantar los servicios con Docker Compose:
-bash
-docker-compose up -d
-4.	La base de datos se inicializa automáticamente con schema.sql.
-5.	Importar los workflows de n8n:
-o	Acceder a http://localhost:5678 (usuario: admin, contraseña: admin123).
-o	En la interfaz de n8n, ir a "Workflows" → "Import" y subir los archivos JSON de backend/n8n-workflows/.
-o	Activar los workflows.
-6.	La aplicación Streamlit estará disponible en http://localhost:8501.
-o	Usuario por defecto: admin, contraseña: admin123 (definida en el script SQL, cambiar en producción).
-7.	El mock HCE estará en http://localhost:5001.
+3. Accede a los servicios:
+   - **Streamlit**: [http://localhost:8502](http://localhost:8502) (User: `admin` / Pass: `admin123`)
+   - **React Dashboard**: [http://localhost:3000](http://localhost:3000)
+   - **n8n**: [http://localhost:5680](http://localhost:5680)
+
+---

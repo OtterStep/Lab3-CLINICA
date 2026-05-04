@@ -117,89 +117,139 @@ def show():
                 with st.spinner("🧠 La IA está analizando los datos..."):
                     recomendacion = obtener_recomendacion_ia(datos_triaje)
                 
-                # Resultado del análisis
-                st.markdown("---")
-                st.markdown("### 🚩 Resultado del Análisis de Triaje")
-                
-                res_col1, res_col2 = st.columns([1, 2])
-                
-                # Definir color según nivel de urgencia
-                color_urgencia = {
-                    "crítico": "red",
-                    "alto": "orange",
-                    "moderado": "blue",
-                    "bajo": "green"
-                }.get(recomendacion['nivel_urgencia'].lower(), "gray")
-                
-                with res_col1:
-                    st.markdown(f"""
-                        <div style="background-color: {color_urgencia}; padding: 20px; border-radius: 10px; color: white; text-align: center;">
-                            <h2 style="color: white; margin: 0;">NIVEL IA</h2>
-                            <h1 style="color: white; margin: 0; font-size: 2.5em;">{recomendacion['nivel_urgencia'].upper()}</h1>
-                        </div>
-                    """, unsafe_allow_html=True)
-                
-                with res_col2:
-                    st.markdown(f"**💡 Conducta Sugerida:**\n{recomendacion['conducta_sugerida']}")
-                    st.markdown(f"**🔍 Diagnósticos Diferenciales:**\n{recomendacion['diagnosticos_diferenciales']}")
-                
-                # Permitir que el médico confirme o corrija el nivel
-                st.markdown("---")
-                st.markdown("### 👨‍⚕️ Validación Profesional")
-                niveles_disponibles = ["bajo", "moderado", "alto", "crítico"]
-                idx_default = niveles_disponibles.index(recomendacion['nivel_urgencia'].lower()) if recomendacion['nivel_urgencia'].lower() in niveles_disponibles else 1
-                
-                nuevo_nivel = st.selectbox(
-                    "¿Desea ajustar el nivel de urgencia sugerido?",
-                    options=niveles_disponibles,
-                    index=idx_default,
-                    help="Si cambia el nivel sugerido por la IA, quedará registrado como una decisión médica."
-                )
-                
-                nivel_final = nuevo_nivel
-                ajustado = nuevo_nivel != recomendacion['nivel_urgencia'].lower()
+                # --- NOTIFICACIÓN INMEDIATA TRAS ANÁLISIS IA ---
+                if recomendacion['nivel_urgencia'].lower() in ['alto', 'crítico']:
+                    with st.status("📡 Enviando alerta prioritaria (IA)...", expanded=True) as status:
+                        try:
+                            chat_id = st.session_state.user.get('telegram_chat_id')
+                            # Obtener nombre del paciente para la notificación
+                            with get_db_connection() as conn:
+                                with conn.cursor() as cur:
+                                    cur.execute("SELECT nombre_completo FROM pacientes WHERE id_paciente = %s", (id_paciente,))
+                                    nombre_p_notif = cur.fetchone()[0]
 
-                # Guardar en BD
-                data_guardado = {
-                    'id_paciente': id_paciente,
-                    'id_usuario': st.session_state.user['id_usuario'],
-                    'presion_arterial_sist': presion_sist,
-                    'presion_arterial_diast': presion_diast,
-                    'frecuencia_cardiaca': frecuencia,
-                    'temperatura': temperatura,
-                    'saturacion_oxigeno': saturacion,
-                    'sintomas': sintomas,
-                    'nivel_urgencia': nivel_final,
-                    'nivel_urgencia_usuario': nuevo_nivel if ajustado else None,
-                    'conducta_sugerida': recomendacion['conducta_sugerida'],
-                    'resultado_ia': recomendacion
-                }
-                id_triaje = guardar_triaje(data_guardado)
-                
-                # Registrar auditoría si hubo cambio manual
-                if ajustado:
-                    registrar_log(
-                        st.session_state.user['id_usuario'], 
-                        "ajuste_profesional_nivel", 
-                        f"Nivel original IA: {recomendacion['nivel_urgencia']}. Ajustado por médico a: {nuevo_nivel}",
-                        id_triaje=id_triaje
-                    )
-                else:
-                    registrar_log(st.session_state.user['id_usuario'], "crear_triaje", f"Triaje ID {id_triaje} creado", id_triaje=id_triaje)
+                            if chat_id:
+                                # Construcción del mensaje detallado solicitado
+                                mensaje_notif = f"🚨 *ALERTA DE TRIAJE {recomendacion['nivel_urgencia'].upper()}*\n\n"
+                                mensaje_notif += f"👤 *Paciente:* {nombre_p_notif} (ID: {id_paciente})\n"
+                                mensaje_notif += f"📝 *Síntomas:* {datos_triaje['sintomas'][:100]}...\n"
+                                mensaje_notif += f"🩺 *Signos:* PA {presion_sist}/{presion_diast}, FC {frecuencia}, Temp {temperatura}, Sat {saturacion}%\n"
+                                mensaje_notif += f"🩺 *Diagnóstico IA:* {recomendacion['diagnosticos_diferenciales']}\n\n"
+                                mensaje_notif += f"⚠️ _Si el diagnóstico es incorrecto, por favor corregirlo en el panel de gestión._"
+                                
+                                response = requests.post("http://n8n:5678/webhook/notificacion", 
+                                             json={
+                                                 "chat_id": str(chat_id), 
+                                                 "mensaje": mensaje_notif,
+                                                 "paciente_nombre": nombre_p_notif,
+                                                 "signos_vitales": {
+                                                     "pa": f"{presion_sist}/{presion_diast}",
+                                                     "fc": frecuencia,
+                                                     "temp": temperatura,
+                                                     "sat": saturacion
+                                                 }
+                                             }, 
+                                             timeout=10)
+                                if response.status_code in [200, 201]:
+                                    st.toast("🔔 Alerta enviada a Telegram", icon="🚨")
+                                    status.update(label="✅ Alerta de Telegram enviada!", state="complete")
+                            else:
+                                status.update(label="⚠️ No se envió alerta: Usuario sin Chat ID", state="error")
+                        except Exception as e:
+                            status.update(label=f"⚠️ Error de conexión n8n: {e}", state="error")
 
-                # Feedback del método
-                metodo = recomendacion.get('metodo', 'DESCONOCIDO')
-                if metodo == "GEMINI-AI":
-                    st.caption(f"✨ Análisis realizado por Google Gemini AI. Prompt ID: {id_triaje}")
-                elif metodo == "MOCK":
-                    st.warning("⚠️ Análisis en modo simulación (Mock)")
+                # Guardar resultado en session_state para persistir
+                st.session_state.recomendacion_ia = recomendacion
+                st.session_state.datos_evaluacion = datos_triaje
 
-                # Webhook n8n
-                try:
-                    requests.post("http://localhost:5678/webhook/triaje-creado", 
-                                 json={"id_triaje": id_triaje, "nivel_urgencia": recomendacion['nivel_urgencia']}, 
-                                 timeout=1)
-                except: pass
+        # Si ya hay una recomendación
+        if 'recomendacion_ia' in st.session_state:
+            recomendacion = st.session_state.recomendacion_ia
+            datos_triaje = st.session_state.datos_evaluacion
 
-                st.success(f"✅ Registro de triaje #{id_triaje} guardado correctamente.")
+            # Resultado del análisis
+            st.markdown("---")
+            st.markdown("### 🚩 Resultado del Análisis de Triaje")
+            
+            res_col1, res_col2 = st.columns([1, 2])
+            
+            color_urgencia = {
+                "crítico": "red",
+                "alto": "orange",
+                "moderado": "blue",
+                "bajo": "green"
+            }.get(recomendacion['nivel_urgencia'].lower(), "gray")
+            
+            with res_col1:
+                st.markdown(f"""
+                    <div style="background-color: {color_urgencia}; padding: 20px; border-radius: 10px; color: white; text-align: center;">
+                        <h2 style="color: white; margin: 0;">NIVEL IA</h2>
+                        <h1 style="color: white; margin: 0; font-size: 2.5em;">{recomendacion['nivel_urgencia'].upper()}</h1>
+                    </div>
+                """, unsafe_allow_html=True)
+            
+            with res_col2:
+                st.markdown(f"**💡 Conducta Sugerida:**\n{recomendacion['conducta_sugerida']}")
+                st.markdown(f"**🔍 Diagnósticos Diferenciales:**\n{recomendacion['diagnosticos_diferenciales']}")
+            
+            st.markdown("---")
+            st.markdown("### 👨‍⚕️ Validación Profesional")
+            st.info("💡 Puede guardar el triaje con la urgencia sugerida o ajustarla si es necesario. Si tiene muchos pacientes, puede guardarlo tal cual y editarlo luego en el módulo de Gestión.")
+            
+            niveles_disponibles = ["bajo", "moderado", "alto", "crítico"]
+            idx_default = niveles_disponibles.index(recomendacion['nivel_urgencia'].lower()) if recomendacion['nivel_urgencia'].lower() in niveles_disponibles else 1
+            
+            # Formulario final opcional para guardar/corregir
+            nuevo_nivel = st.selectbox(
+                "¿Desea ajustar el nivel de urgencia sugerido?",
+                options=niveles_disponibles,
+                index=idx_default,
+                key="ajuste_nivel_final"
+            )
+            
+            btn_col1, btn_col2 = st.columns([1, 2])
+            with btn_col1:
+                finalizar_btn = st.button("💾 GUARDAR REGISTRO FINAL", type="primary", use_container_width=True)
+
+            if finalizar_btn:
+                with st.status("🚀 Guardando triaje...", expanded=False) as status:
+                    nivel_final = nuevo_nivel
+                    ajustado = nuevo_nivel != recomendacion['nivel_urgencia'].lower()
+
+                    # Guardar en BD
+                    data_guardado = {
+                        'id_paciente': id_paciente,
+                        'id_usuario': st.session_state.user['id_usuario'],
+                        'presion_arterial_sist': datos_triaje['presion_arterial_sist'],
+                        'presion_arterial_diast': datos_triaje['presion_arterial_diast'],
+                        'frecuencia_cardiaca': datos_triaje['frecuencia_cardiaca'],
+                        'temperatura': datos_triaje['temperatura'],
+                        'saturacion_oxigeno': datos_triaje['saturacion_oxigeno'],
+                        'sintomas': datos_triaje['sintomas'],
+                        'nivel_urgencia': nivel_final,
+                        'nivel_urgencia_usuario': nuevo_nivel if ajustado else None,
+                        'conducta_sugerida': recomendacion['conducta_sugerida'],
+                        'resultado_ia': recomendacion
+                    }
+                    id_triaje = guardar_triaje(data_guardado)
+                    
+                    # Sincronización secundaria n8n
+                    try:
+                        requests.post("http://n8n:5678/webhook/triaje-creado", 
+                                     json={"id_triaje": id_triaje, "nivel_urgencia": nivel_final}, timeout=5)
+                    except: pass
+                    
+                    status.update(label="✅ Triaje guardado!", state="complete")
+
+                st.success(f"✅ Triaje #{id_triaje} registrado con éxito.")
                 st.balloons()
+                if 'recomendacion_ia' in st.session_state:
+                    del st.session_state.recomendacion_ia
+                    del st.session_state.datos_evaluacion
+            
+            # Feedback del método
+            metodo = recomendacion.get('metodo', 'DESCONOCIDO')
+            if metodo == "GEMINI-AI":
+                st.caption(f"✨ Análisis realizado por Google Gemini AI.")
+            elif metodo == "MOCK":
+                st.warning("⚠️ Análisis en modo simulación (Mock)")

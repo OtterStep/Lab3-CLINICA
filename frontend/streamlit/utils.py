@@ -29,7 +29,7 @@ def verificar_usuario(username, password):
     try:
         with get_db_connection() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute("SELECT id_usuario, nombre_usuario, contrasena_hash, rol FROM usuarios WHERE nombre_usuario = %s", (username,))
+                cur.execute("SELECT id_usuario, nombre_usuario, contrasena_hash, rol, telegram_chat_id FROM usuarios WHERE nombre_usuario = %s", (username,))
                 user = cur.fetchone()
                 if user:
                     stored_hash = user['contrasena_hash'].strip()

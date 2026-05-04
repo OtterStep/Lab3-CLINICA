@@ -45,8 +45,8 @@
         "data": {
           "id_paciente": "={{$node[\"Webhook Triaje Creado\"].json[\"paciente_id\"]}}",
           "sintomas": "={{$node[\"Webhook Triaje Creado\"].json[\"sintomas\"]}}",
-          "nivel_urgencia": "={{$node[\"IA Modelo (Predicción)\"].json[\"prioridad\"]}}",
-          "conducta_sugerida": "={{$node[\"IA Modelo (Predicción)\"].json[\"recomendacion\"]}}"
+          "nivel_urgencia": "={{$node[\"IA Modelo (Predicción)\"].json[\"nivel_urgencia\"]}}",
+          "conducta_sugerida": "={{$node[\"IA Modelo (Predicción)\"].json[\"conducta_sugerida\"]}}"
         }
       },
       "name": "Guardar en PostgreSQL",

@@ -1,0 +1,330 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 8
+            }
+          ]
+        }
+      },
+      "name": "Cron Diario",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        -100
+      ],
+      "id": "a2524949-7b4e-4d09-a270-d042a9cb15aa"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-sync-id",
+      "name": "Cada 5 minutos",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    COUNT(*) as total_triajes,\n    COUNT(CASE WHEN nivel_urgencia = 'crítico' THEN 1 END) as criticos,\n    COUNT(CASE WHEN nivel_urgencia = 'alto' THEN 1 END) as altos\nFROM triajes \nWHERE fecha_hora >= NOW() - INTERVAL '1 day';",
+        "additionalFields": {}
+      },
+      "name": "Resumen Diario",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -100
+      ],
+      "id": "c9e8dac4-ff62-420e-967d-d59c5c3418c3"
+    },
+    {
+      "parameters": {
+        "chatId": "TU_CHAT_ID_DOCTOR",
+        "text": "=📊 *REPORTE DIARIO DE TRIAJE*\n\n✅ Total procesados: {{ $json.total_triajes }}\n🚨 Críticos: {{ $json.criticos }}\n⚠️ Altos: {{ $json.altos }}\n\n_Generado automáticamente por el sistema de IA._",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "name": "Telegram Reporte",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        -100
+      ],
+      "id": "telegram-reporte-id"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM triajes WHERE estado_sincronizacion_hce = 'pendiente' OR (estado_sincronizacion_hce = 'error' AND intentos_sincronizacion < 5) LIMIT 10;",
+        "additionalFields": {}
+      },
+      "name": "Consultar Pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        288,
+        192
+      ],
+      "id": "4f166af4-6ea5-4372-8f4a-8fc61bcc9943"
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "http://mock-hce:5001/api/hce/sync",
+        "options": {},
+        "bodyParametersUi": {
+          "parameter": [
+            {
+              "name": "id_triaje",
+              "value": "={{ $json.id_triaje }}"
+            },
+            {
+              "name": "nivel_urgencia",
+              "value": "={{ $json.nivel_urgencia }}"
+            },
+            {
+              "name": "sintomas",
+              "value": "={{ $json.sintomas }}"
+            }
+          ]
+        }
+      },
+      "name": "Enviar a HCE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        544,
+        192
+      ],
+      "id": "de30f876-0f01-49f9-bfe4-9726677bbab6"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE triajes \nSET estado_sincronizacion_hce = 'enviado', \n    intentos_sincronizacion = intentos_sincronizacion + 1\nWHERE id_triaje = {{ $node[\"Consultar Pendientes\"].json.id_triaje }};",
+        "additionalFields": {}
+      },
+      "name": "Marcar Éxito",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        784,
+        80
+      ],
+      "id": "880c488d-e98d-467c-baae-78b75d17c4f1"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE triajes \nSET estado_sincronizacion_hce = 'error', \n    intentos_sincronizacion = intentos_sincronizacion + 1\nWHERE id_triaje = {{ $node[\"Consultar Pendientes\"].json.id_triaje }};",
+        "additionalFields": {}
+      },
+      "name": "Marcar Error",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [
+        784,
+        288
+      ],
+      "id": "cba1be44-b157-492e-9cee-fa3baf0b9d4e"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notificacion",
+        "options": {}
+      },
+      "name": "Webhook Notificación",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -80
+      ],
+      "id": "437434db-c919-4811-b38c-78d06f9a4397"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.body.chat_id }}",
+        "text": "={{ $json.body.mensaje }}",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "name": "Telegram Alerta",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        600,
+        -80
+      ],
+      "id": "214aabb4-aca0-4a6f-87e4-b9624b7e5725"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reporte-doctor",
+        "options": {}
+      },
+      "name": "Webhook Reporte Doctor",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        352,
+        350
+      ],
+      "id": "webhook-doctor-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = items[0].json.body;\nlet mensaje = `📋 *Reporte de Triajes - ${data.fecha}*\\n\\n`;\n\ndata.pacientes.forEach(p => {\n    mensaje += `👤 *${p.nombre}*\\n   🚩 Urgencia: ${p.urgencia.toUpperCase()}\\n   🩺 Obs: ${p.diagnostico}...\\n\\n`;\n});\n\nreturn [{json: {mensaje}}];"
+      },
+      "name": "Formatear Reporte Doctor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        550,
+        350
+      ],
+      "id": "code-doctor-id"
+    },
+    {
+      "parameters": {
+        "chatId": "TU_CHAT_ID_DOCTOR",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parseMode": "Markdown"
+        }
+      },
+      "name": "Telegram Reporte Doctor",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        750,
+        350
+      ],
+      "id": "telegram-doctor-id"
+    }
+  ],
+  "connections": {
+    "Cron Diario": {
+      "main": [
+        [
+          {
+            "node": "Resumen Diario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumen Diario": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reporte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Enviar a HCE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada 5 minutos": {
+      "main": [
+        [
+          {
+            "node": "Consultar Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar a HCE": {
+      "main": [
+        [
+          {
+            "node": "Marcar Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Notificación": {
+      "main": [
+        [
+          {
+            "node": "Telegram Alerta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Reporte Doctor": {
+      "main": [
+        [
+          {
+            "node": "Formatear Reporte Doctor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Reporte Doctor": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reporte Doctor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4bbbc92aae96175efaf57e410134ac310d0412a1ef52a39c0c9f83b44715c30e"
+  }
+}
